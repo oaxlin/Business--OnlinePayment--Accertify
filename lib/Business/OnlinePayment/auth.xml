@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<transaction>
+    <orderReference>order-1000</orderReference>
+    <transactionReference>transaction-1000</transactionReference>
+    <transactionAmount>50.00</transactionAmount>
+    <transactionCurrency>USD</transactionCurrency>
+    <transactionTaxAmount></transactionTaxAmount>
+    <currencyConversionBaseAmount></currencyConversionBaseAmount>
+    <currencyConversionBaseCurrency></currencyConversionBaseCurrency>
+    <ipAddress></ipAddress>
+    <paymentGatewayInformation>
+        <apiOperation>AUTHORIZE</apiOperation>
+        <gatewayOrderID>2000000000001000</gatewayOrderID>
+        <gatewayTransactionID>1</gatewayTransactionID>
+        <transactionCashAdvance></transactionCashAdvance>
+        <transactionFrequency></transactionFrequency>
+        <transactionSource></transactionSource>
+        <transactionTaxExempt></transactionTaxExempt>
+        <transactionTaxReference></transactionTaxReference>
+        <_3DSecure>
+        <_3DSecureID>12345</_3DSecureID>
+    <_3DSecureAcsEci></_3DSecureAcsEci>
+<_3DSecureEnrollmentStatus></_3DSecureEnrollmentStatus>
+<_3DSecureAuthenticationStatus></_3DSecureAuthenticationStatus>
+<_3DSecureAuthenticationToken></_3DSecureAuthenticationToken>
+<_3DSecureAuthenticationXid></_3DSecureAthenticationXid>
+</_3DSecure>
+<posDetails>
+    <posTerminalAttended></posTerminalAttended>
+    <posTerminalCardHolderActivated></posTerminalCardHolderActivated>
+    <posTerminalEntryMode></posTerminalEntryMode>
+    <posTerminalInputCapability></posTerminalInputCapability>
+    <posTerminalLocation></posTerminalLocation>
+</posDetails>
+</paymentGatewayInformation>
+<paymentInformation>
+    <cardDetails>
+        <cardNumber>5424XXXXXXXXXXXX</cardNumber>
+        <cardExpireMonth>05</cardExpireMonth>
+        <cardExpireYear>13</cardExpireYear>
+        <cardSecurityCode></cardSecurityCode>
+        <cardSequenceNumber></cardSequenceNumber>
+        <cardSession></cardSession>
+        <cardToken></cardToken>
+        <cardTrack1></cardTrack1>
+        <cardTrack2></cardTrack2>
+        32 P a g e
+        CONFIDENTIALTransaction: Authorize XML Sample
+        <cardEmvicc></cardEmvicc>
+        <cardHolderFullName>XXXXXXXXXXX</cardHolderFullName>
+        <cardHolderTitle>XX</cardHolderTitle>
+        <cardHolderFirstName>XXXXX</cardHolderFirstName>
+        <cardHolderMiddleName>XXX</cardHolderMiddleName>
+        <cardHolderLastName>XXXXX</cardHolderLastName>
+        <cardAuthorizedAmount>200</cardAuthorizedAmount>
+    </cardDetails>
+</paymentInformation>
+<billingInformation>
+    <billingAddressLine1>XXXXXXXXXXX</billingAddressLine1>
+    <billingCity>XXXXX</billingCity>
+    <billingRegion>XX</billingRegion>
+    <billingPostalCode>XXXXXXXXX</billingPostalCode>
+    <billingCountry>XXX</billingCountry>
+    <billingPhone>XXX-XXX-XXXX</billingPhone>
+</billingInformation>
+<customerInformation>
+    <customerEmail>XXXXXXXX@XXXXXXXXXXXX.XXX</customerEmail>
+</customerInformation>
+<shippingInformation>
+    <shippingTitle>XX</shippingTitle>
+    <shippingFirstName>XXXXX</shippingFirstName>
+    <shippingLastName>XXXXX</shippingLastName>
+    <shippingMiddleName>XXX</shippingMiddleName>
+    <shippingAddressLine1>XXXXXXXXXXX</shippingAddressLine1>
+    <shippingCity>XXXXX</shippingCity>
+    <shippingRegion>XX</shippingRegion>
+    <shippingPostalCode>XXXXXXXXX</shippingPostalCode>
+    <shippingCountry>XXX</shippingCountry>
+    <shippingPhone>XXX-XXX-XXXX</shippingPhone>
+    <shippingMethod>XXXXXXX</shippingMethod>
+</shippingInformation>
+</transaction>
