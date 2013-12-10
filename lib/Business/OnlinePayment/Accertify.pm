@@ -37,7 +37,7 @@ Version 0.936
 
 This is a plugin for the Business::OnlinePayment interface.  Please refer to that docuementation for general usage, and here for Accertify specific usage.
 
-In order to use this module, you will need to have an account set up with Accertify. L<http://www.litle.com/>
+In order to use this module, you will need to have an account set up with Accertify. L<http://www.Accertify.com/>
 
 
   use Business::OnlinePayment;
@@ -156,6 +156,7 @@ The following actions are valid
   post authorization
   credit
   void
+  tokenize
 
 =head1 Accertify specific data
 
@@ -246,7 +247,7 @@ sub set_defaults {
     );
     # TODO card_token
 
-    $self->test_transaction(0);
+    $self->test_transaction(1);
 
     if ( $opts{debug} ) {
         $self->debug( $opts{debug} );
@@ -264,7 +265,7 @@ sub set_defaults {
     $self->api_version('8.1')                   unless $self->api_version;
     $self->batch_api_version('8.1')             unless $self->batch_api_version;
     $self->chargeback_api_version('2.2')        unless $self->chargeback_api_version;
-    $self->xmlns('http://www.litle.com/schema') unless $self->xmlns;
+    $self->xmlns('http://www.Accertify.com/schema') unless $self->xmlns;
 }
 
 =head2 test_transaction
@@ -282,12 +283,7 @@ sub test_transaction {
     if (! defined $testMode) { $testMode = $self->{'test_transaction'} || 0; }
 
     if ($testMode) {
-        $self->{'test_transaction'} = 'sandbox';
-        $self->verify_SSL(0);
-
-        $self->server('www.testlitle.com');
-        $self->port('443');
-        $self->path('/sandbox/communicator/online');
+        $self->{'test_transaction'} = $testMode;
     }
 
     return $self->{'test_transaction'};
@@ -377,7 +373,7 @@ sub map_fields {
 =head2 format_misc_field
 
 A new method not directly supported by BOP.
-Used internally to guarentee that XML data will conform to the Litle spec.
+Used internally to guarentee that XML data will conform to the Accertify spec.
   field  - The hash key we are checking against
   maxLen - The maximum length allowed (extra bytes will be truncated)
   minLen - The minimum length allowed
@@ -417,7 +413,6 @@ sub format_misc_field {
 =head2 format_amount_field
 
 A new method not directly supported by BOP.
-Used internally to change amounts from the BOP "5.00" format to the format expected by Litle "500"
 
 $tx->format_amount_field( \%content, 'amount' );
 
@@ -427,7 +422,6 @@ sub format_amount_field {
     my ($self, $data, $field) = @_;
     if (defined ( $data->{$field} ) ) {
         $data->{$field} = sprintf( "%.2f", $data->{$field} );
-        $data->{$field} =~ s/\.//g;
     }
 }
 
@@ -459,7 +453,7 @@ sub format_phone_field {
 
 =head2 map_request
 
-Converts the BOP data to something that Litle can use.
+Converts the BOP data to something that Accertify can use.
 
 =cut
 
@@ -482,12 +476,11 @@ sub map_request {
 
     # make sure the date is in MMYY format
     $content->{'expiration'} =~ s/^(\d{1,2})\D*\d*?(\d{2})$/$1$2/;
+    $content->{'expMonth'} = $1;
+    $content->{'expYear'} = $2;
 
     if ( ! defined $content->{'description'} ) { $content->{'description'} = ''; } # shema req
     $content->{'description'} =~ s/[^\w\s\*\,\-\'\#\&\.]//g;
-
-    # Litle pre 0.934 used token, however BOP likes card_token
-    $content->{'card_token'} = $content->{'token'} if ! defined $content->{'card_token'} && defined $content->{'card_token'};
 
     # only numbers are allowed in company_phone
     $self->format_phone_field($content, 'company_phone');
@@ -547,48 +540,39 @@ sub map_request {
       #warn "$trunc->[0] => ".($content->{ $trunc->[0] }||'')."\n" if $DEBUG;
     }
 
+    tie my %customerInformation, 'Tie::IxHash', $self->_revmap_fields(
+        content      => $content,
+        customerEmail        => 'email',
+    );
+
     tie my %billToAddress, 'Tie::IxHash', $self->_revmap_fields(
         content      => $content,
-        name         => 'name',
-        email        => 'email',
-        addressLine1 => 'address',
-        city         => 'city',
-        state        => 'state',
-        zip          => 'zip',
-        country      => 'country'
-        , #TODO: will require validation to the spec, this field wont' work as is
-        phone => 'phone',
+        billingAddressLine1 => 'address',
+        billingCity         => 'city',
+        billingRegion       => 'state',
+        billingPostalCode   => 'zip',
+        billingCountry      => 'country',
+        billingPhone => 'phone',
     );
 
     tie my %shipToAddress, 'Tie::IxHash', $self->_revmap_fields(
         content      => $content,
-        name         => 'ship_name',
-        email        => 'ship_email',
-        addressLine1 => 'ship_address',
-        city         => 'ship_city',
-        state        => 'ship_state',
-        zip          => 'ship_zip',
-        country      => 'ship_country'
-        , #TODO: will require validation to the spec, this field wont' work as is
-        phone => 'ship_phone',
+        #shippingTitle
+        #shippingFirstName
+        #shippingLastName
+        #shippingMiddleInitial
+        shippingAddressLine1 => 'ship_address',
+        shippingCity         => 'ship_city',
+        shippingRegion       => 'ship_state',
+        shippingPostalCode   => 'ship_zip',
+        shippingCountry      => 'ship_country',
+        shippingPhone        => 'ship_phone',
+        #shippingMethod
     );
-
-    tie my %customerinfo, 'Tie::IxHash',
-      $self->_revmap_fields(
-        content      => $content,
-        customerType => 'customerType',
-      );
-
-    tie my %custombilling, 'Tie::IxHash',
-      $self->_revmap_fields(
-        content      => $content,
-        phone      => 'company_phone',
-        descriptor => 'description',
-      );
 
     ## loop through product list and generate linItemData for each
     #
-    my @products = ();
+    my $mostExpensive;
     if( defined $content->{'products'} && scalar( @{ $content->{'products'} } ) < 100 ){
       foreach my $prodOrig ( @{ $content->{'products'} } ) {
           # use a local copy of prod so that we do not have issues if they try to submit more then once.
@@ -610,189 +594,205 @@ sub map_request {
           );
           foreach my $trunc ( @validate ) { $self->format_misc_field(\%prod,$trunc); }
 
-          tie my %lineitem, 'Tie::IxHash',
-            $self->_revmap_fields(
-              content              => \%prod,
-              itemSequenceNumber   => 'itemSequenceNumber',
-              itemDescription      => 'description',
-              productCode          => 'code',
-              quantity             => 'quantity',
-              unitOfMeasure        => 'units',
-              taxAmount            => 'tax',
-              lineItemTotal        => 'amount',
-              lineItemTotalWithTax => 'totalwithtax',
-              itemDiscountAmount   => 'discount',
-              commodityCode        => 'code',
-              unitCost             => 'cost', # This "amount" field uses decimals
-            );
-          push @products, \%lineitem;
+          if (! defined $mostExpensive || $mostExpensive->{'amount'} < $prod{'amount'}) {
+              $mostExpensive = \%prod;
+          }
       }
     }
-
-    #
-    #
-    tie my %enhanceddata, 'Tie::IxHash', $self->_revmap_fields(
-        content                => $content,
-        customerReference      => 'po_number',
-        salesTax               => 'salestax',
-        discountAmount         => 'discount',
-        shippingAmount         => 'shipping',
-        dutyAmount             => 'duty',
-        invoiceReferenceNumber => 'invoice_number_length_15',
-        orderDate              => 'orderdate',
-        lineItemData           => \@products,
-    );
+    if ($mostExpensive) {
+        $content->{'max_order_sku'} = $mostExpensive->{'code'};
+    }
 
     tie my %card, 'Tie::IxHash', $self->_revmap_fields(
         content            => $content,
-        type               => 'card_type',
-        number             => 'card_number',
-        expDate            => 'expiration',
-        cardValidationNum  => 'cvv2',
+        cardNumber         => 'card_number',
+        cardExpireMonth    => 'expMonth',
+        cardExpireYear     => 'expYear',
+        cardSecurityCode   => 'cvv2',
+        cardToken          => 'card_token',
+        cardHolderFullName => 'name',
     );
 
-    tie my %token, 'Tie::IxHash', $self->_revmap_fields(
-        content            => $content,
-        litleToken         => 'card_token',
-        expDate            => 'expiration',
-        cardValidationNum  => 'cvv2',
+    tie my %paymentInformation, 'Tie::IxHash', $self->_revmap_fields(
+        content     => $content,
+        cardDetails => \%card,
     );
-
-    tie my %processing, 'Tie::IxHash', $self->_revmap_fields(
-        content               => $content,
-        bypassVelocityCheck   => 'velocity_check',
-    );
-
-    tie my %cardholderauth, 'Tie::IxHash',
-      $self->_revmap_fields(
-        content                     => $content,
-        authenticationValue         => '3ds',
-        authenticationTransactionId => 'visaverified',
-        customerIpAddress           => 'ip',
-        authenticatedByMerchant     => 'authenticated',
-      );
-
-    tie my %merchantdata, 'Tie::IxHash',
-      $self->_revmap_fields(
-        content            => $content,
-        affiliate          => 'affiliate',
-        merchantGroupingId => 'merchant_grouping_id',
-      );
-
-    tie my %recyclingrequest, 'Tie::IxHash',
-      $self->_revmap_fields(
-        content      => $content,
-        recycleBy    => 'recycle_by',
-        recycleId    => 'recycle_id',
-      );
 
     my %req;
 
-    if ( $action eq 'sale' ) {
+    if ( $action eq 'tokenize' ) {
         croak 'missing card_token or card_number' if length($content->{'card_number'} || $content->{'card_token'} || '') == 0;
-        tie %req, 'Tie::IxHash', $self->_revmap_fields(
-            content       => $content,
-            orderId       => 'invoice_number',
-            amount        => 'amount',
-            orderSource   => 'orderSource',
-            billToAddress => \%billToAddress,
-            card          => $content->{'card_number'} ? \%card : {},
-            token         => $content->{'card_token'} ? \%token : {},
 
-            #cardholderAuthentication    =>  \%cardholderauth,
-            customBilling => \%custombilling,
-            enhancedData  => \%enhanceddata,
-            processingInstructions  =>  \%processing,
-            allowPartialAuth => 'partial_auth',
-            merchantData => \%merchantdata,
-            recyclingRequest => \%recyclingrequest,
+        $content->{'api_operation'} = 'TOKENIZE';
+        tie my %paymentGatewayInformation, 'Tie::IxHash',
+          $self->_revmap_fields(
+            content        => $content,
+            apiOperation   => 'api_operation',
+          );
+
+        tie %req, 'Tie::IxHash', $self->_revmap_fields(
+            content             => $content,
+            transactionCurrency => 'currency',
+            paymentInformation  => \%paymentInformation,
+        );
+    }
+    elsif ( $action eq 'sale' ) {
+        croak 'missing card_token or card_number' if length($content->{'card_number'} || $content->{'card_token'} || '') == 0;
+
+        $content->{'api_operation'} = 'PAY';
+        tie my %paymentGatewayInformation, 'Tie::IxHash',
+          $self->_revmap_fields(
+            content              => $content,
+            apiOperation         => 'api_operation',
+            gatewayOrderId       => 'order_number',
+            gatewayTransactionId => 'order_number',
+          );
+
+        tie %req, 'Tie::IxHash', $self->_revmap_fields(
+            content                   => $content,
+            orderReference            => 'invoice_number',
+            transactionReference      => 'invoice_number',
+            transactionAmount         => 'amount',
+            transactionCurrency       => 'currency',
+            transactionTaxAmount      => 'tax',
+            #currencyConversionBaseAmount
+            #currencyConversionBaseCurrency
+            ipAddress                 => 'ip',
+            orderCustoemrOrderDate    => 'orderdate',
+            orderCustomerReference    => 'po_number',
+            orderProductSKU           => 'max_order_sku',
+            #orderRequestorName
+            orderTaxAmount            => 'tax',
+            paymentGatewayInformation => \%paymentGatewayInformation,
+            paymentInformation        => \%paymentInformation,
+            billingInformation        => \%billToAddress,
+            customerInformation       => \%customerInformation,
+            shippingInformation       => \%shipToAddress,
         );
     }
     elsif ( $action eq 'authorization' ) {
         croak 'missing card_token or card_number' if length($content->{'card_number'} || $content->{'card_token'} || '') == 0;
-        tie %req, 'Tie::IxHash', $self->_revmap_fields(
-            content       => $content,
-            orderId       => 'invoice_number',
-            amount        => 'amount',
-            orderSource   => 'orderSource',
-            billToAddress => \%billToAddress,
-            card          => $content->{'card_number'} ? \%card : {},
-            token         => $content->{'card_token'} ? \%token : {},
 
-            #cardholderAuthentication    =>  \%cardholderauth,
-            processingInstructions  =>  \%processing,
-            customBilling => \%custombilling,
-            allowPartialAuth => 'partial_auth',
-            merchantData     => \%merchantdata,
-            recyclingRequest => \%recyclingrequest,
+        $content->{'api_operation'} = 'AUTHORIZE';
+        tie my %paymentGatewayInformation, 'Tie::IxHash',
+          $self->_revmap_fields(
+            content        => $content,
+            apiOperation   => 'api_operation',
+            gatewayOrderId => 'order_number',
+            gatewayTransactionId => 'order_number',
+          );
+
+        tie %req, 'Tie::IxHash', $self->_revmap_fields(
+            content                   => $content,
+            orderReference            => 'invoice_number',
+            transactionReference      => 'invoice_number',
+            transactionAmount         => 'amount',
+            transactionCurrency       => 'currency',
+            transactionTaxAmount      => 'tax',
+            #currencyConversionBaseAmount
+            #currencyConversionBaseCurrency
+            ipAddress                 => 'ip',
+            orderCustoemrOrderDate    => 'orderdate',
+            orderCustomerReference    => 'po_number',
+            orderProductSKU           => 'max_order_sku',
+            #orderRequestorName
+            orderTaxAmount            => 'tax',
+            paymentGatewayInformation => \%paymentGatewayInformation,
+            paymentInformation        => \%paymentInformation,
+            billingInformation        => \%billToAddress,
+            customerInformation       => \%customerInformation,
+            shippingInformation       => \%shipToAddress,
         );
     }
     elsif ( $action eq 'capture' ) {
-        push @required_fields, qw( order_number amount );
-        tie %req, 'Tie::IxHash',
+        $content->{'api_operation'} = 'CAPTURE';
+        tie my %paymentGatewayInformation, 'Tie::IxHash',
           $self->_revmap_fields(
-            content      => $content,
-            litleTxnId   => 'order_number',
-            amount       => 'amount',
-            enhancedData => \%enhanceddata,
-            processingInstructions => \%processing,
+            content        => $content,
+            apiOperation   => 'api_operation',
+            gatewayOrderId => 'order_number',
+            gatewayTransactionId => 'order_number',
           );
+
+        tie %req, 'Tie::IxHash', $self->_revmap_fields(
+            content                   => $content,
+            orderReference            => 'invoice_number',
+            transactionReference      => 'invoice_number',
+            transactionAmount         => 'amount',
+            transactionCurrency       => 'currency',
+            transactionTaxAmount      => 'tax',
+            #currencyConversionBaseAmount
+            #currencyConversionBaseCurrency
+            ipAddress                 => 'ip',
+            orderCustoemrOrderDate    => 'orderdate',
+            orderCustomerReference    => 'po_number',
+            orderProductSKU           => 'max_order_sku',
+            #orderRequestorName
+            orderTaxAmount            => 'tax',
+            paymentGatewayInformation => \%paymentGatewayInformation,
+            paymentInformation        => \%paymentInformation,
+            billingInformation        => \%billToAddress,
+            customerInformation       => \%customerInformation,
+            shippingInformation       => \%shipToAddress,
+        );
     }
     elsif ( $action eq 'credit' ) {
 
-       # IF there is a litleTxnId, it's a normal linked credit
-       if( $content->{'order_number'} ){
-          push @required_fields, qw( order_number amount );
-          tie %req, 'Tie::IxHash', $self->_revmap_fields(
-              content       => $content,
-              litleTxnId    => 'order_number',
-              amount        => 'amount',
-              customBilling => \%custombilling,
-              processingInstructions => \%processing,
-          );
+        # IF there is a litleTxnId, it's a normal linked credit
+        if( $content->{'order_number'} ){
+            $content->{'api_operation'} = 'REFUND';
+            tie my %paymentGatewayInformation, 'Tie::IxHash',
+              $self->_revmap_fields(
+                content        => $content,
+                apiOperation   => 'api_operation',
+                gatewayOrderId => 'order_number',
+                gatewayTransactionId => 'order_number',
+              );
+
+            tie %req, 'Tie::IxHash', $self->_revmap_fields(
+                content                   => $content,
+                orderReference            => 'invoice_number',
+                transactionReference      => 'invoice_number',
+                transactionAmount         => 'amount',
+                transactionCurrency       => 'currency',
+                transactionTaxAmount      => 'tax',
+                #currencyConversionBaseAmount
+                #currencyConversionBaseCurrency
+                ipAddress                 => 'ip',
+                paymentGatewayInformation => \%paymentGatewayInformation,
+                paymentInformation        => \%paymentInformation,
+            );
         }
-       # ELSE it's an unlinked, which requires different data
-       else {
-          croak 'missing card_token or card_number' if length($content->{'card_number'} || $content->{'card_token'} || '') == 0;
-          push @required_fields, qw( invoice_number amount );
-          tie %req, 'Tie::IxHash', $self->_revmap_fields(
-              content       => $content,
-              orderId       => 'invoice_number',
-              amount        => 'amount',
-              orderSource   => 'orderSource',
-              billToAddress => \%billToAddress,
-              card          => $content->{'card_number'} ? \%card : {},
-              token         => $content->{'card_token'} ? \%token : {},
-              customBilling => \%custombilling,
-              processingInstructions => \%processing,
-          );
-       }
+        # ELSE it's an unlinked, which requires different data
+        else {
+            croak 'missing card_token or card_number' if length($content->{'card_number'} || $content->{'card_token'} || '') == 0;
+            #TODO
+        }
     }
     elsif ( $action eq 'void' ) {
-        push @required_fields, qw( order_number );
-        tie %req, 'Tie::IxHash',
+        $content->{'api_operation'} = 'VOID';
+        tie my %paymentGatewayInformation, 'Tie::IxHash',
           $self->_revmap_fields(
-            content                 => $content,
-            litleTxnId              => 'order_number',
-            processingInstructions  =>  \%processing,
+            content        => $content,
+            apiOperation   => 'api_operation',
+            gatewayOrderId => 'order_number',
+            gatewayTransactionId => 'order_number',
           );
+
+        tie %req, 'Tie::IxHash', $self->_revmap_fields(
+            content                   => $content,
+            orderReference            => 'invoice_number',
+            transactionReference      => 'invoice_number',
+        );
     }
     elsif ( $action eq 'authReversal' ) {
+        # TODO
         push @required_fields, qw( order_number amount );
         tie %req, 'Tie::IxHash',
           $self->_revmap_fields(
             content    => $content,
             litleTxnId => 'order_number',
             amount     => 'amount',
-          );
-    }
-    elsif ( $action eq 'accountUpdate' ) {
-        push @required_fields, qw( card_number expiration );
-        tie %req, 'Tie::IxHash',
-          $self->_revmap_fields(
-            content => $content,
-            orderId => 'customer_id',
-            card    => \%card,
           );
     }
 
@@ -804,7 +804,7 @@ sub submit {
     my ($self) = @_;
 
     local $SCRUBBER=1;
-    $self->_litle_init;
+    $self->_accertify_init;
 
     my %content = $self->content();
 
@@ -820,45 +820,16 @@ sub submit {
         ENCODING    => 'utf-8',
     );
 
-    ## set the authentication data
-    tie my %authentication, 'Tie::IxHash',
-      $self->_revmap_fields(
-        content  => \%content,
-        user     => 'login',
-        password => 'password',
-      );
-
     warn Dumper($req) if $DEBUG;
     ## Start the XML Document, parent tag
     $writer->xmlDecl();
-    $writer->startTag(
-        "litleOnlineRequest",
-        version    => $self->api_version,
-        xmlns      => $self->xmlns,
-        merchantId => $content{'merchantid'},
-    );
+    $writer->startTag("transaction");
 
-    $self->_xmlwrite( $writer, 'authentication', \%authentication );
-
-    ## partial capture modifier, odd location, because it modifies the start tag :(
-    my %extra;
-    if ($content{'TransactionType'} eq 'capture'){
-        $extra{'partial'} = $content{'partial'} ? 'true' : 'false';
-    }
-
-    $writer->startTag(
-        $content{'TransactionType'},
-        id          => $content{'invoice_number'},
-        reportGroup => $content{'report_group'} || 'BOP',
-        customerId  => $content{'customer_id'} || 1,
-        %extra,
-    );
     foreach ( keys( %{$req} ) ) {
         $self->_xmlwrite( $writer, $_, $req->{$_} );
     }
 
-    $writer->endTag( $content{'TransactionType'} );
-    $writer->endTag("litleOnlineRequest");
+    $writer->endTag("transaction");
     $writer->end();
     ## END XML Generation
 
@@ -870,65 +841,82 @@ sub submit {
         utf8::encode($post_data) if utf8::is_utf8($post_data);
     }
 
-    my ( $page, $status_code, %headers ) = $self->https_post( { 'Content-Type' => 'text/xml; charset=utf-8' } , $post_data);
+    if ($content{'accertify_url'} && $content{'accertify_url'} =~ /https:\/\/([^:\/]+)(?::(\d+))?(.+)$/) {
+        $self->server($1);
+        $self->port($2 || '443');
+        $self->path($3);
+    } else {
+        die 'Unable to find/parse accertify_url.';
+    }
+
+    my ( $page, $status_code, %headers ) = $self->https_post( { 'Content-Type' => 'text/xml; charset=utf-8',headers => {
+        'Authorization' => 'Basic ' . MIME::Base64::encode("$content{'login'}:$content{'password'}",''),
+        }} , $post_data);
+$page =<<EOF;
+<?xml version="1.0" encoding="UTF-8"?>
+<transaction-results>
+    <transaction-id>order-1000</transaction-id>
+    <cross-reference>c2c029e6-d56c-427c-b769-508a94a5775e</cross-reference>
+    <rules-tripped>1010100000000000206:Paygw: Is Authorize:1;1010100000000000154:Authorize:10;</rules-tripped>
+    <total-score>11</total-score>
+    <recommendation-code>CODE</recommendation-code>
+    <responseData>
+        <transaction>
+            <merchant/>
+            <apiOperation>AUTHORIZE</apiOperation>
+            <transactionOperationResult>SUCCESS</transactionOperationResult>
+            <responseGatewayCode>APPROVED</responseGatewayCode>
+            <orderReference>order-1000</orderReference>
+            <transactionReference>transaction-1000</transactionReference>
+            <transactionAmount>\$50.00</transactionAmount>
+            <transactionCurrency>USD</transactionCurrency>
+            <gatewayOrderID>2000000000001000</gatewayOrderID>
+            <gatewayTransactionID>1</gatewayTransactionID>
+            <transactionSource>MOTO</transactionSource>
+            <transactionAcquirerID>FDMSHC</transactionAcquirerID>
+            <transactionAuthorizationCode>001149</transactionAuthorizationCode>
+            <transactionBatch>1</transactionBatch>
+            <transactionReceipt>1204051230</transactionReceipt>
+            <transactionTerminal>456789</transactionTerminal>
+            <transactionType>AUTHORIZATION</transactionType>
+            <orderTotalAuthorizedAmount>\$50.00</orderTotalAuthorizedAmount>
+            <orderTotalCapturedAmount>\$0.00</orderTotalCapturedAmount>
+            <orderTotalRefundedAmount>\$0.00</orderTotalRefundedAmount>
+            <responseAcquirerCode>00</responseAcquirerCode>
+            <responseAcquirerMessage>Approved</responseAcquirerMessage>
+            <authResponseCardSecurityCodeError>?</authResponseCardSecurityCodeError>
+            <authResponseDate>0102</authResponseDate>
+            <authResponseMerchantAdviceCode>??</authResponseMerchantAdviceCode>
+            <authResponseMessage>Approved</authResponseMessage>
+        </transaction>
+    </responseData>
+</transaction-results>
+EOF
 
     $self->server_response( $page );
     warn Dumper $self->server_response, $status_code, \%headers if $DEBUG;
 
     my $response = $self->_parse_xml_response( $page, $status_code );
-    if ( exists( $response->{'response'} ) && $response->{'response'} == 1 ) {
-        ## parse error type error
-        warn Dumper $response, $self->server_request;
-        $self->error_message( $response->{'message'} );
-        return;
-    } else {
-        $self->error_message(
-            $response->{ $content{'TransactionType'} . 'Response' }
-              ->{'message'} );
-    }
     $self->{_response} = $response;
 
     warn Dumper($response) if $DEBUG;
 
     ## Set up the data:
-    my $resp = $response->{ $content{'TransactionType'} . 'Response' };
+    my $resp = $response->{ 'responseData' }->{'transaction'};
     $self->{_response} = $resp;
-    $self->order_number( $resp->{'litleTxnId'} || '' );
-    $self->result_code( $resp->{'response'}    || '' );
-    $resp->{'authCode'} =~ s/\D//g if $resp->{'authCode'};
-    $self->authorization( $resp->{'authCode'} || '' );
-    $self->cvv2_response( $resp->{'fraudResult'}->{'cardValidationResult'}
-          || '' );
-    $self->avs_code( $resp->{'fraudResult'}->{'avsResult'} || '' );
-    if( $resp->{enhancedAuthResponse}
-        && $resp->{enhancedAuthResponse}->{fundingSource}
-        && $resp->{enhancedAuthResponse}->{fundingSource}->{type} eq 'PREPAID' ) {
+    $self->order_number( $resp->{'gatewayOrderID'} || '' );
+    $self->result_code( $resp->{'responseAcquirerCode'}    || '' );
+    $self->authorization( $resp->{'transactionAuthorizationCode'} || '' );
+    $self->cvv2_response( $resp->{'responseCSCGatewayCode'} || '' );
+    $self->avs_code( $resp->{'responseAVSGatewayCode'} || '' );
 
-      $self->is_prepaid(1);
-      $self->prepaid_balance( $resp->{enhancedAuthResponse}->{fundingSource}->{availableBalance} );
-    } else {
-      $self->is_prepaid(0);
-    }
-
-    #$self->is_dupe( $resp->{'duplicate'} ? 1 : 0 );
-
-    if( $resp->{enhancedAuthResponse}
-        && $resp->{enhancedAuthResponse}->{affluence}
-      ){
-      $self->get_affluence( $resp->{enhancedAuthResponse}->{affluence} );
-    }
-    $self->is_success( $self->result_code() eq '000' ? 1 : 0 );
-    if( $self->result_code() eq '010' ) {
-      # Partial approval, if they chose that option
+    if( $resp->{'responseGatewayCode'} eq 'APPROVED' ) {
       $self->is_success(1);
     }
 
     ##Failure Status for 3.0 users
     if ( !$self->is_success ) {
-        my $f_status =
-            $ERRORS{ $self->result_code }->{'failure'}
-          ? $ERRORS{ $self->result_code }->{'failure'}
-          : 'decline';
+        my $f_status = $resp->{'authResponseMessage'};
         $self->failure_status($f_status);
     }
 
@@ -954,219 +942,10 @@ sub _parse_xml_response {
     }
     else {
         $status_code =~ s/[\r\n\s]+$//; # remove newline so you can see the error in a linux console
-        if ( $status_code =~ /^(?:900|599)/ ) { $status_code .= ' - verify Litle has whitelisted your IP'; }
+        if ( $status_code =~ /^(?:900|599)/ ) { $status_code .= ' - verify Accertify has whitelisted your IP'; }
         die "CONNECTION FAILURE: $status_code";
     }
     return $response;
-}
-
-sub _parse_batch_response {
-    my ( $self, $args ) = @_;
-    my @results;
-    my $resp = $self->{'batch_response'};
-    $self->order_number( $resp->{'litleBatchId'} );
-
-    #$self->invoice_number( $resp->{'id'} );
-    my @result_types =
-      grep { $_ =~ m/Response$/ }
-      keys %{$resp};    ## get a list of result types in this batch
-    return {
-        'account_update' => $self->_get_update_response,
-        ## do the other response types now
-    };
-}
-
-=head2 add_item
-
-A new method not directly supported by BOP.
-Interface to adding multiple entries, so we can write and interface with batches
-
- my %content = (
-   action          =>  'Account Update',
-   card_number     =>  4111111111111111,
-   expiration      =>  1216,
-   customer_id     =>  $card->{'uid'},
-   invoice_number  =>  123,
-   type            =>  'VI',
-   login           =>  $merchant->{'login'},
- );
- $tx->add_item( \%content );
-
-=cut
-
-sub add_item {
-    my $self = shift;
-    ## do we want to render it now, or later?
-    push @{ $self->{'batch_entries'} }, shift;
-}
-
-=head2 create_batch
-
-A new method not directly supported by BOP.
-Send the current batch to Litle.
-
- $tx->add_item( $item1 );
- $tx->add_item( $item2 );
- $tx->add_item( $item3 );
-
- my $opts = {
-  login       => 'testdrive',
-  password    => '123qwe',
-  merchantid  => '123456',
-  batch_id    => '001',
-  method      => 'https', # sftp or https
-  ftp_username=> 'fred',
-  ftp_password=> 'pancakes',
- };
-
- $tx->content();
-
- $tx->create_batch( %$opts );
-
-=cut
-
-sub create_batch {
-    my ( $self, %opts ) = @_;
-
-    local $SCRUBBER=1;
-    $self->_litle_init(\%opts);
-
-    if ( ! defined $self->{'batch_entries'} || scalar( @{ $self->{'batch_entries'} } ) < 1 ) {
-        $self->error_message('Cannot create an empty batch');
-        return;
-    }
-
-    my $post_data;
-
-    my $writer = new XML::Writer(
-        OUTPUT      => \$post_data,
-        DATA_MODE   => 1,
-        DATA_INDENT => 2,
-        ENCODING    => 'utf-8',
-    );
-    ## set the authentication data
-    tie my %authentication, 'Tie::IxHash',
-      $self->_revmap_fields(
-        content  => \%opts,
-        user     => 'login',
-        password => 'password',
-      );
-
-    ## Start the XML Document, parent tag
-    $writer->xmlDecl();
-    $writer->startTag(
-        "litleRequest",
-        version => $self->batch_api_version,
-        xmlns   => $self->xmlns,
-        id      => $opts{'batch_id'} || time,
-        numBatchRequests => 1,  #hardcoded for now, not doing multiple merchants
-    );
-
-    ## authentication
-    $self->_xmlwrite( $writer, 'authentication', \%authentication );
-    ## batch Request tag
-    $writer->startTag(
-        'batchRequest',
-        id => $opts{'batch_id'} || time,
-        numAccountUpdates => scalar( @{ $self->{'batch_entries'} } ),
-        merchantId        => $opts{'merchantid'},
-    );
-    foreach my $entry ( @{ $self->{'batch_entries'} } ) {
-        $self->_litle_scrubber_add_card($entry->{'card_number'});
-        my $req     = $self->map_request( $entry );
-        $writer->startTag(
-            $entry->{'TransactionType'},
-            id          => $entry->{'invoice_number'},
-            reportGroup => $entry->{'report_group'} || 'BOP',
-            customerId  => $entry->{'customer_id'} || 1,
-        );
-        foreach ( keys( %{$req} ) ) {
-            $self->_xmlwrite( $writer, $_, $req->{$_} );
-        }
-        $writer->endTag( $entry->{'TransactionType'} );
-        ## need to also handle the action tag here, and custid info
-    }
-    $writer->endTag("batchRequest");
-    $writer->endTag("litleRequest");
-    $writer->end();
-    ## END XML Generation
-
-    $self->server_request( $post_data );
-    warn $self->server_request if $DEBUG;
-
-    #----- Send it
-    if ( $opts{'method'} && $opts{'method'} eq 'sftp' ) {    #FTP
-        my $sftp = $self->_sftp_connect(\%opts,'inbound');
-
-        ## save the file out, can't put directly from var, and is multibyte, so issues from filehandle
-        my $filename = $opts{'batch_id'} || $opts{'login'} . "_" . time;
-        my $io = IO::String->new($post_data);
-        tie *IO, 'IO::String';
-
-        $sftp->put( $io, "$filename.prg" )
-          or $self->_die("Cannot PUT $filename", $sftp->error);
-        $sftp->rename( "$filename.prg",
-          "$filename.asc" ) #once complete, you rename it, for pickup
-          or $self->die("Cannot RENAME file", $sftp->error);
-        $self->is_success(1);
-        $self->server_response( $sftp->message );
-    }
-    elsif ( $opts{'method'} && $opts{'method'} eq 'https' ) {    #https post
-        $self->port('15000');
-        $self->path('/');
-        my ( $page, $status_code, %headers ) =
-          $self->https_post($post_data);
-        $self->server_response( $page );
-
-        warn Dumper [ $page, $status_code, \%headers ] if $DEBUG;
-
-        my $response = {};
-        if ( $status_code =~ /^200/ ) {
-            if ( ! eval { $response = XMLin($page); } ) {
-                $self->_die("XML PARSING FAILURE: $@");
-            }
-            elsif ( exists( $response->{'response'} )
-                && $response->{'response'} == 1 )
-            {
-                ## parse error type error
-                warn Dumper( $response, $self->server_request );
-                $self->error_message( $response->{'message'} );
-                return;
-            }
-            else {
-                $self->error_message(
-                    $response->{'batchResponse'}->{'message'} );
-            }
-        }
-        else {
-            $self->_die("CONNECTION FAILURE: $status_code");
-        }
-        $self->{_response} = $response;
-
-        ##parse out the batch info as our general status
-        my $resp = $response->{'batchResponse'};
-        $self->order_number( $resp->{'litleSessionId'} );
-        $self->result_code( $response->{'response'} );
-        $self->is_success( $response->{'response'} eq '0' ? 1 : 0 );
-
-        warn Dumper($response) if $DEBUG;
-        unless ( $self->is_success() ) {
-            unless ( $self->error_message() ) {
-                $self->error_message(
-                        "(HTTPS response: $status_code) "
-                      . "(HTTPS headers: "
-                      . join( ", ",
-                        map { "$_ => " . $headers{$_} } keys %headers )
-                      . ") "
-                      . "(Raw HTTPS content: $page)"
-                );
-            }
-        }
-        if ( $self->is_success() ) {
-            $self->{'batch_response'} = $resp;
-        }
-    }
-
 }
 
 sub _die {
@@ -1236,14 +1015,14 @@ sub _xmlwrite {
     }
 }
 
-sub _litle_scrubber_add_card {
+sub _accertify_scrubber_add_card {
     my ( $self, $cc ) = @_;
     return if ! $cc;
     my $del = substr($cc,0,6).('X'x(length($cc)-10)).substr($cc,-4,4); # show first 6 and last 4
     scrubber_add_scrubber({$cc=>$del});
 }
 
-sub _litle_init {
+sub _accertify_init {
     my ( $self, $opts ) = @_;
 
     # initialize/reset the reporting methods
@@ -1257,11 +1036,9 @@ sub _litle_init {
     foreach my $ptr (\%content,$opts) {
         next if ! $ptr;
         scrubber_init({
-            quotemeta($ptr->{'password'}||'')=>'DELETED',
-            quotemeta($ptr->{'ftp_password'}||'')=>'DELETED',
-            ($ptr->{'cvv2'} ? '(?<=[^\d])'.quotemeta($ptr->{'cvv2'}).'(?=[^\d])' : '')=>'DELETED',
+            ($ptr->{'cvv2'} ? '>'.quotemeta($ptr->{'cvv2'}).'<' : '')=>'>DELETED<',
             });
-        $self->_litle_scrubber_add_card($ptr->{'card_number'});
+        $self->_accertify_scrubber_add_card($ptr->{'card_number'});
     }
 }
 
@@ -1282,41 +1059,41 @@ Certain features are not yet implemented (no current personal business need), th
 
 =head1 BUGS
 
-Please report any bugs or feature requests to C<bug-business-onlinepayment-litle at rt.cpan.org>, or through
-the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Business-OnlinePayment-Litle>. I will be notified, and then you'll
+Please report any bugs or feature requests to C<bug-business-onlinepayment-accertify at rt.cpan.org>, or through
+the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Business-OnlinePayment-Accertify>. I will be notified, and then you'll
 automatically be notified of progress on your bug as I make changes.
 
-You may also add to the code via github, at L<http://github.com/Jayceh/Business--OnlinePayment--Litle.git>
+You may also add to the code via github, at L<http://github.com/Jayceh/Business--OnlinePayment--Accertify.git>
 
 
 =head1 SUPPORT
 
 You can find documentation for this module with the perldoc command.
 
-    perldoc Business::OnlinePayment::Litle
+    perldoc Business::OnlinePayment::Accertify
 
 
 You can also look for information at:
 
-L<http://www.litle.com/>
+L<http://www.accertify.com/>
 
 =over 4
 
 =item * RT: CPAN's request tracker
 
-L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=Business-OnlinePayment-Litle>
+L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=Business-OnlinePayment-Accertify>
 
 =item * AnnoCPAN: Annotated CPAN documentation
 
-L<http://annocpan.org/dist/Business-OnlinePayment-Litle>
+L<http://annocpan.org/dist/Business-OnlinePayment-Accertify>
 
 =item * CPAN Ratings
 
-L<http://cpanratings.perl.org/d/Business-OnlinePayment-Litle>
+L<http://cpanratings.perl.org/d/Business-OnlinePayment-Accertify>
 
 =item * Search CPAN
 
-L<http://search.cpan.org/dist/Business-OnlinePayment-Litle/>
+L<http://search.cpan.org/dist/Business-OnlinePayment-Accertify/>
 
 =back
 
